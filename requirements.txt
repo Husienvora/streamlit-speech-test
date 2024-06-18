@@ -1,0 +1,11 @@
+websockets
+asyncio
+pyaudio
+streamlit
+elevenlabs
+langchain_google_genai
+
+langchain-community==0.2.1
+langchain-core==0.2.1
+langchain-text-splitters==0.2.0
+python-dotenv
