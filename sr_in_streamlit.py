@@ -4,6 +4,7 @@ from translate import translate
 from speech_synthesize import gen_dub
 from configure import auth_key
 import threading
+from queue import Queue
 
 # Set AssemblyAI API key
 aai.settings.api_key = auth_key
@@ -14,10 +15,13 @@ if "text" not in st.session_state:
     st.session_state["translated_text"] = ""
     st.session_state["run"] = False
 
+# Create a queue for communication between threads
+queue = Queue()
+
 
 def start_listening():
     st.session_state["run"] = True
-    threading.Thread(target=run_transcription).start()
+    run_transcription()
 
 
 def stop_listening():
@@ -35,6 +39,7 @@ stop.button("Stop listening", on_click=stop_listening)
 
 # Define callbacks
 def on_open(session_opened: aai.RealtimeSessionOpened):
+
     print("Session ID:", session_opened.session_id)
 
 
@@ -43,16 +48,11 @@ def on_data(transcript: aai.RealtimeTranscript):
         return
 
     if isinstance(transcript, aai.RealtimeFinalTranscript):
-        st.session_state["text"] = transcript.text
-        st.markdown(st.session_state["text"])
-        st.session_state["translated_text"] = translate(
-            st.session_state["text"], language="Japanese"
-        )
-        st.markdown(st.session_state["translated_text"])
-        gen_dub(st.session_state["translated_text"])
-        st.rerun()
-    else:
-        print(transcript.text, end="\r")
+        translated_text = translate(transcript.text, language="Japanese")
+        gen_dub(translated_text)
+        queue.put((transcript.text, translated_text))  # Add both texts to the queue
+
+        st.rerun()  # Trigger a re-render of the Streamlit app
 
 
 def on_error(error: aai.RealtimeError):
@@ -84,9 +84,14 @@ def run_transcription():
 
     # Start streaming
     transcriber.stream(microphone_stream)
+    # while True:
+    #     print("True")
 
 
-# Display transcription and translation
-if st.session_state["text"] != "Listening...":
-    st.markdown(f"**Transcription:** {st.session_state['text']}")
-    st.markdown(f"**Translation:** {st.session_state['translated_text']}")
+# Display transcription and translation (Updated with values from queue)
+st.markdown(
+    f"**Transcription:** {st.session_state['text']}"
+)  # Optional: Use session state or directly from queue
+st.markdown(
+    f"**Translation:** {st.session_state['translated_text']}"
+)  # Optional: Use session state or directly from queue
