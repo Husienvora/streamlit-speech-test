@@ -1,118 +1,92 @@
 import streamlit as st
-import websockets
-import asyncio
-import base64
-import json
+import assemblyai as aai
 from translate import translate
 from speech_synthesize import gen_dub
 from configure import auth_key
+import threading
 
-import pyaudio
+# Set AssemblyAI API key
+aai.settings.api_key = auth_key
 
+# Initialize Streamlit session state
 if "text" not in st.session_state:
     st.session_state["text"] = "Listening..."
+    st.session_state["translated_text"] = ""
     st.session_state["run"] = False
-
-
-FRAMES_PER_BUFFER = 3200
-FORMAT = pyaudio.paInt16
-CHANNELS = 1
-RATE = 16000
-p = pyaudio.PyAudio()
-# translated_text = translate("hello this is a sunflower", language="Japanese")
-# st.write(translated_text)
-# starts recording
-stream = p.open(
-    format=FORMAT,
-    channels=CHANNELS,
-    rate=RATE,
-    input=True,
-    frames_per_buffer=FRAMES_PER_BUFFER,
-)
 
 
 def start_listening():
     st.session_state["run"] = True
+    threading.Thread(target=run_transcription).start()
 
 
 def stop_listening():
     st.session_state["run"] = False
+    if "transcriber" in st.session_state:
+        st.session_state.transcriber.close()
 
 
 st.title("Get real-time transcription")
 
 start, stop = st.columns(2)
-
 start.button("Start listening", on_click=start_listening)
-
 stop.button("Stop listening", on_click=stop_listening)
 
-URL = "wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000"
+
+# Define callbacks
+def on_open(session_opened: aai.RealtimeSessionOpened):
+    print("Session ID:", session_opened.session_id)
 
 
-async def send_receive():
+def on_data(transcript: aai.RealtimeTranscript):
+    if not transcript.text:
+        return
 
-    print(f"Connecting websocket to url ${URL}")
-
-    async with websockets.connect(
-        URL,
-        extra_headers=(("Authorization", auth_key),),
-        ping_interval=5,
-        ping_timeout=20,
-    ) as _ws:
-
-        r = await asyncio.sleep(0.1)
-        print("Receiving SessionBegins ...")
-
-        session_begins = await _ws.recv()
-        print(session_begins)
-        print("Sending messages ...")
-
-        async def send():
-            while st.session_state["run"]:
-                try:
-                    data = stream.read(FRAMES_PER_BUFFER)
-                    data = base64.b64encode(data).decode("utf-8")
-                    json_data = json.dumps({"audio_data": str(data)})
-                    r = await _ws.send(json_data)
-
-                except websockets.exceptions.ConnectionClosedError as e:
-                    print(e)
-                    assert e.code == 4008
-                    break
-
-                except Exception as e:
-                    print(e)
-                    assert False, "Not a websocket 4008 error"
-
-                r = await asyncio.sleep(0.01)
-
-        async def receive():
-            while st.session_state["run"]:
-                try:
-                    result_str = await _ws.recv()
-                    result = json.loads(result_str)["text"]
-
-                    if json.loads(result_str)["message_type"] == "FinalTranscript":
-                        print(result)
-                        st.session_state["text"] = result
-                        start.markdown(st.session_state["text"])
-                        translated_text = translate(
-                            st.session_state["text"], language="Japanese"
-                        )
-                        stop.markdown(translated_text)
-                        gen_dub(translated_text)
-
-                except websockets.exceptions.ConnectionClosedError as e:
-                    print(e)
-                    assert e.code == 4008
-                    break
-
-                except Exception as e:
-                    print(e)
-                    assert False, "Not a websocket 4008 error"
-
-        send_result, receive_result = await asyncio.gather(send(), receive())
+    if isinstance(transcript, aai.RealtimeFinalTranscript):
+        st.session_state["text"] = transcript.text
+        st.markdown(st.session_state["text"])
+        st.session_state["translated_text"] = translate(
+            st.session_state["text"], language="Japanese"
+        )
+        st.markdown(st.session_state["translated_text"])
+        gen_dub(st.session_state["translated_text"])
+        st.rerun()
+    else:
+        print(transcript.text, end="\r")
 
 
-asyncio.run(send_receive())
+def on_error(error: aai.RealtimeError):
+    print("An error occurred:", error)
+
+
+def on_close():
+    print("Closing Session")
+
+
+def run_transcription():
+    # Create the Real-Time transcriber
+    transcriber = aai.RealtimeTranscriber(
+        on_data=on_data,
+        on_error=on_error,
+        sample_rate=44_100,
+        on_open=on_open,
+        on_close=on_close,
+    )
+
+    # Store the transcriber in the session state
+    st.session_state.transcriber = transcriber
+
+    # Start the connection
+    transcriber.connect()
+
+    # Open a microphone stream
+    microphone_stream = aai.extras.MicrophoneStream()
+
+    # Start streaming
+    transcriber.stream(microphone_stream)
+
+
+# Display transcription and translation
+if st.session_state["text"] != "Listening...":
+    st.markdown(f"**Transcription:** {st.session_state['text']}")
+    st.markdown(f"**Translation:** {st.session_state['translated_text']}")
