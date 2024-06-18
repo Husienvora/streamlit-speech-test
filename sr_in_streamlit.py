@@ -89,9 +89,9 @@ def run_transcription():
 
 
 # Display transcription and translation (Updated with values from queue)
-st.markdown(
-    f"**Transcription:** {st.session_state['text']}"
-)  # Optional: Use session state or directly from queue
-st.markdown(
-    f"**Translation:** {st.session_state['translated_text']}"
-)  # Optional: Use session state or directly from queue
+# st.markdown(
+#     f"**Transcription:** {st.session_state['text']}"
+# )  # Optional: Use session state or directly from queue
+# st.markdown(
+#     f"**Translation:** {st.session_state['translated_text']}"
+# )  # Optional: Use session state or directly from queue
