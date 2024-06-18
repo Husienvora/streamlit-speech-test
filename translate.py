@@ -10,7 +10,7 @@ import os
 load_dotenv()
 
 translation_template = """
-Translate the following sentence into {language} or if it is in {language} translate it and return in english , return ONLY the translation, nothing else.
+Translate the following sentence into {language} or if the sentence is in {language} then translate it to english, return ONLY the translation, nothing else.
 
 Sentence: {sentence}
 """

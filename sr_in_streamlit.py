@@ -5,9 +5,13 @@ from speech_synthesize import gen_dub
 from configure import auth_key
 import threading
 from queue import Queue
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Set AssemblyAI API key
-aai.settings.api_key = auth_key
+aai.settings.api_key = os.environ["ASSEMBLY_KEY"]
 
 # Initialize Streamlit session state
 if "text" not in st.session_state:
